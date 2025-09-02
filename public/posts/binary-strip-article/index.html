@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="noindex, nofollow">
+<title>Demystifying Binary Stripping | My New Hugo Site</title>
+<meta name="keywords" content="">
+<meta name="description" content="This article contains basic info about stripping:
+
+what it is
+how it looks in a binary (i.e. executable file)
+what do we need it for?
+
+All the explanations and examples are shown on a Rust app compiled on macOS for ARM64 architecture. Anyway, conclusions will be mostly the same if you are on a different OS like Linux or use a different CPU (Intel or AMD processor).
+What is stripping?
+Stripping is a process of removing symbol tables from a binary.">
+<meta name="author" content="">
+<link rel="canonical" href="http://localhost:1313/posts/binary-strip-article/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.266d4e960ac939b9134aaadeaa840a44e6cd249c53155de96a04f016725c120a.css" integrity="sha256-Jm1OlgrJObkTSqreqoQKRObNJJxTFV3pagTwFnJcEgo=" rel="preload stylesheet" as="style">
+<link rel="icon" href="http://localhost:1313/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="http://localhost:1313/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="http://localhost:1313/favicon-32x32.png">
+<link rel="apple-touch-icon" href="http://localhost:1313/apple-touch-icon.png">
+<link rel="mask-icon" href="http://localhost:1313/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="http://localhost:1313/posts/binary-strip-article/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="http://localhost:1313/" accesskey="h" title="My New Hugo Site (Alt + H)">My New Hugo Site</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)" aria-label="Toggle theme">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    
+    <h1 class="post-title entry-hint-parent">
+      Demystifying Binary Stripping
+    </h1>
+    <div class="post-meta"><span title='2025-09-02 22:47:47 +0200 CEST'>September 2, 2025</span>
+
+</div>
+  </header> 
+  <div class="post-content"><p>This article contains basic info about stripping:</p>
+<ul>
+<li>what it is</li>
+<li>how it looks in a binary (i.e. executable file)</li>
+<li>what do we need it for?</li>
+</ul>
+<p>All the explanations and examples are shown on a Rust app compiled on macOS for ARM64 architecture. Anyway, conclusions will be mostly the same if you are on a different OS like Linux or use a different CPU (Intel or AMD processor).</p>
+<h3 id="what-is-stripping">What is stripping?<a hidden class="anchor" aria-hidden="true" href="#what-is-stripping">#</a></h3>
+<p>Stripping is a process of removing symbol tables from a binary.</p>
+<h3 id="what-is-a-symbol-table">What is a symbol table?<a hidden class="anchor" aria-hidden="true" href="#what-is-a-symbol-table">#</a></h3>
+<p>A symbol table is a part of a binary file. That part contains info about function names that are included in the binary.</p>
+<h3 id="what-do-we-need-a-symbol-table-for">What do we need a symbol table for?<a hidden class="anchor" aria-hidden="true" href="#what-do-we-need-a-symbol-table-for">#</a></h3>
+<p>Well, in case your app crashes, the crash log/message will contain much more detailed information about a particular place in code where the crash happened.
+Instead of</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-shell" data-lang="shell"><span style="display:flex;"><span>thread <span style="color:#e6db74">&#39;main&#39;</span> panicked at <span style="color:#e6db74">&#39;index out of bounds: the len is 3 but the index is 5&#39;</span>, &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>stack backtrace:
+</span></span><span style="display:flex;"><span>   0:        0x102a1c8f0 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   1:        0x102a1c7a4 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   2:        0x102a1b2c8 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   3:        0x102a1c5f4 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   4:        0x102a1c3b8 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   5:        0x102a1c2a0 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   6:        0x102a18f3c - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   7:        0x102a18d24 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>   8:        0x102a18c98 - &lt;unknown&gt;
+</span></span><span style="display:flex;"><span>note: run with <span style="color:#e6db74">`</span>RUST_BACKTRACE<span style="color:#f92672">=</span>full<span style="color:#e6db74">`</span> <span style="color:#66d9ef">for</span> a verbose backtrace
+</span></span></code></pre></div><p>you will get something like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-shell" data-lang="shell"><span style="display:flex;"><span>thread <span style="color:#e6db74">&#39;main&#39;</span> panicked at <span style="color:#e6db74">&#39;index out of bounds: the len is 3 but the index is 5&#39;</span>, src/main.rs:42:18
+</span></span><span style="display:flex;"><span>stack backtrace:
+</span></span><span style="display:flex;"><span>   0: rust_begin_unwind
+</span></span><span style="display:flex;"><span>             at /rustc/d5a82bbd26e1ad8b7401f6a718a9c57c96905483/library/std/src/panicking.rs:575:5
+</span></span><span style="display:flex;"><span>   1: rust_panic
+</span></span><span style="display:flex;"><span>             at /rustc/d5a82bbd26e1ad8b7401f6a718a9c57c96905483/library/std/src/panicking.rs:519:5
+</span></span><span style="display:flex;"><span>   2: std::panicking::rust_panic_with_hook
+</span></span><span style="display:flex;"><span>             at /rustc/d5a82bbd26e1ad8b7401f6a718a9c57c96905483/library/std/src/panicking.rs:267:17
+</span></span><span style="display:flex;"><span>   3: std::panicking::begin_panic_handler
+</span></span><span style="display:flex;"><span>             at /rustc/d5a82bbd26e1ad8b7401f6a718a9c57c96905483/library/std/src/panicking.rs:597:13
+</span></span><span style="display:flex;"><span>   4: core::panicking::panic_fmt
+</span></span><span style="display:flex;"><span>             at /rustc/d5a82bbd26e1ad8b7401f6a718a9c57c96905483/library/core/src/panicking.rs:67:14
+</span></span><span style="display:flex;"><span>   5: core::panicking::panic_bounds_check
+</span></span><span style="display:flex;"><span>             at /rustc/d5a82bbd26e1ad8b7401f6a718a9c57c96905483/library/core/src/panicking.rs:162:5
+</span></span><span style="display:flex;"><span>   6: myapp::process_data
+</span></span><span style="display:flex;"><span>             at ./src/main.rs:42:18
+</span></span><span style="display:flex;"><span>   7: myapp::main
+</span></span><span style="display:flex;"><span>             at ./src/main.rs:15:9
+</span></span><span style="display:flex;"><span>   8: core::ops::function::FnOnce::call_once
+</span></span><span style="display:flex;"><span>             at /rustc/d5a82bbd26e1ad8b7401f6a718a9c57c96905483/library/core/src/ops/function.rs:250:5
+</span></span><span style="display:flex;"><span>note: run with <span style="color:#e6db74">`</span>RUST_BACKTRACE<span style="color:#f92672">=</span>full<span style="color:#e6db74">`</span> <span style="color:#66d9ef">for</span> a verbose backtrace
+</span></span></code></pre></div><p>The second sample is much more helpful as it shows the code location (<em>src/main.rs:42:18</em>).</p>
+<h3 id="well-if-a-symbol-table-gives-us-such-an-advantage-for-debugging-and-issue-fixing---why-does-the-stripping-procedure-exist-in-the-first-place">Well, if a symbol table gives us such an advantage for debugging and issue fixing - why does the stripping procedure exist in the first place?<a hidden class="anchor" aria-hidden="true" href="#well-if-a-symbol-table-gives-us-such-an-advantage-for-debugging-and-issue-fixing---why-does-the-stripping-procedure-exist-in-the-first-place">#</a></h3>
+<p>There are two main reasons why developers may decide to strip a binary:</p>
+<ol>
+<li>Reducing binary size</li>
+<li>As an anti-RE (reverse engineering) mechanism.</li>
+</ol>
+<h3 id="how-much-can-a-binary-be-reduced-with-stripping">How much can a binary be reduced with stripping?<a hidden class="anchor" aria-hidden="true" href="#how-much-can-a-binary-be-reduced-with-stripping">#</a></h3>
+<p>It depends on your app and the language, but usually the difference is <strong>about 20%</strong>.</p>
+<h3 id="what-about-the-anti-re-bit">What about the anti-RE bit?<a hidden class="anchor" aria-hidden="true" href="#what-about-the-anti-re-bit">#</a></h3>
+<p>The same way the symbol table makes our lives easier, it also makes the life of a reverse engineer easier.
+Reverse engineers / hackers / security engineers may research your software out of curiosity or to use gained information for a cyber attack.
+It depends on your business model and the type of software to fully answer the question - should you apply stripping or not.</p>
+<ul>
+<li>If your app is used only to send network requests to your backend where all business logic is running - well, it seems that there is not much to &lsquo;research&rsquo; in your app.</li>
+<li>If your app contains some business logic or implementation that you want to hide - it&rsquo;s better to apply stripping as an anti-RE measure.</li>
+</ul>
+<h3 id="how-good-is-stripping-as-an-anti-re-measure">How good is stripping as an anti-RE measure?<a hidden class="anchor" aria-hidden="true" href="#how-good-is-stripping-as-an-anti-re-measure">#</a></h3>
+<p>Well, stripping makes the life of a reverse engineer a bit worse but it&rsquo;s not the ultimate defense mechanism.
+Let me show an example of how the same code looks before stripping and after.
+A binary before stripping, disassembled in Ghidra:
+<img alt="Non-stripped binary in Ghidra" loading="lazy" src="/images/normal_code.png"></p>
+<p>The same binary after stripping:
+<img alt="Stripped binary in Ghidra" loading="lazy" src="/images/stripped_code.png">
+Pay attention to the function names - in the listing and in the right part with the functions list.
+Instead of normal function names we can see in the stripped example only something like &ldquo;FUN_100001b8c&rdquo;.
+From that picture you also can see why it&rsquo;s not an ultimate defense against reverse engineering. The disassembled code is the same for both cases, so a focused reverse engineer with a lot of time can still reconstruct our code.</p>
+<h3 id="how-to-apply-stripping-to-a-binary-file">How to apply stripping to a binary file?<a hidden class="anchor" aria-hidden="true" href="#how-to-apply-stripping-to-a-binary-file">#</a></h3>
+<p>Usually it&rsquo;s just</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-shell" data-lang="shell"><span style="display:flex;"><span>strip your-compiled-binary-file
+</span></span></code></pre></div><p>Be wary though, that the stripping tool may be different depending on your operating system.
+For example, on macOS the strip tool is usually part of Xcode tools (the path might be something like <em>/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip</em> but it&rsquo;s available just with <em>strip</em> in Terminal.app).</p>
+<h3 id="can-we-have-the-best-of-both-worlds---a-stripped-binary-and-detailed-crash-reports">Can we have the best of both worlds - a stripped binary and detailed crash reports?<a hidden class="anchor" aria-hidden="true" href="#can-we-have-the-best-of-both-worlds---a-stripped-binary-and-detailed-crash-reports">#</a></h3>
+<p>Actually, yes. When you have a build that you&rsquo;re planning to ship to your customers, you should save debug symbols:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-shell" data-lang="shell"><span style="display:flex;"><span><span style="color:#75715e"># on macOS:</span>
+</span></span><span style="display:flex;"><span>dsymutil myapp -o myapp.dSYM
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># on Linux you&#39;d probably use objcopy tool: https://ftp.gnu.org/old-gnu/Manuals/binutils-2.12/html_node/binutils_5.html</span>
+</span></span></code></pre></div><p>Then, you can convert addresses from a crash report to function names with the following command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-shell" data-lang="shell"><span style="display:flex;"><span><span style="color:#75715e"># let&#39;s say, you got an address 0x102a1c8f0 from a crash report that you want to desymbol:</span>
+</span></span><span style="display:flex;"><span>atos -o myapp.dSYM/Contents/Resources/DWARF/myapp 0x102a1c8f0
+</span></span></code></pre></div>
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="http://localhost:1313/">My New Hugo Site</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>
